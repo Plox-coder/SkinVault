@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 268" preserveAspectRatio="none" fill="none">
+<defs>
+ <linearGradient id="gold" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#987643"/><stop offset=".22" stop-color="#e1be78"/><stop offset=".53" stop-color="#6f542d"/><stop offset=".78" stop-color="#c49d5b"/><stop offset="1" stop-color="#7f663b"/></linearGradient>
+ <linearGradient id="sheen" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#c8aa65"/><stop offset=".65" stop-color="#45391f"/><stop offset="1" stop-color="#a68a52"/></linearGradient>
+</defs>
+<!-- The image ends inside a square client-style frame; lower band is for the icon or ward gem. -->
+<path d="M26 12 H101 L109 5 H131 L139 12 H214 L231 30 V211 L222 221 H139 L130 231 H110 L101 221 H18 L9 211 V30 Z" stroke="#0c1010" stroke-width="8" stroke-linejoin="round"/>
+<path d="M26 12 H101 L109 5 H131 L139 12 H214 L231 30 V211 L222 221 H139 L130 231 H110 L101 221 H18 L9 211 V30 Z" stroke="url(#gold)" stroke-width="2.7" stroke-linejoin="round"/>
+<path d="M30 20 H98 L107 14 H133 L142 20 H209 L223 34 V206 L216 213 H143 L132 223 H108 L97 213 H24 L17 206 V34 Z" stroke="url(#sheen)" stroke-width="1.6" stroke-linejoin="round"/>
+<path d="M34 23 L20 37 V59 M206 23 L220 37 V59 M20 186 V204 L34 209 H63 M220 186 V204 L206 209 H177" stroke="#6e5a32" stroke-width="1.5" stroke-linecap="round"/>
+<path d="M120 4 L129 13 L120 22 L111 13 Z" fill="#0b1923" stroke="url(#gold)" stroke-width="2.5"/>
+<path d="M120 10 L124 13 L120 17 L116 13 Z" stroke="#826c3d" stroke-width="1"/>
+<path d="M120 221 L129 231 L120 240 L111 231 Z" fill="#06151f" stroke="url(#gold)" stroke-width="2.2"/>
+</svg>

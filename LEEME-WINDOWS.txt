@@ -1,0 +1,25 @@
+SKINVAULT REACT v0.9.4 - TARJETAS DE PRECIO BLOQUEADO
+=======================================================
+
+CAMBIOS
+-------
+- Todas las tarjetas muestran una etiqueta fija (como las Epicas y Legendarias),
+  sin campos numericos ni menus para editar RP o esencia mitica.
+- El precio por ID tiene prioridad sobre los valores editados en backups antiguos.
+- Las miticas de esencia mitica muestran su coste historico en EM, bloqueado.
+- Las variantes del Sanctasanctorum muestran <=16.000 RP (maximo garantizado,
+  40 chispas). Las exaltadas, <=32.000 RP (80 chispas).
+- El maximo teorico de RP del Sanctasanctorum se suma SOLO en su apartado,
+  separado de los precios de compra directa. No equivale al gasto real.
+- Las skins sin precio oficial documentado siguen indicando "Coste pendiente".
+
+INSTALACION
+-----------
+1. Si ya usabas SkinVault, haz primero una "Copia JSON".
+2. Deten el servidor con Ctrl+C.
+3. Descomprime este ZIP en una carpeta nueva, o usa el ZIP de parche.
+4. En Windows: ejecuta "npm.cmd install" y luego "npm.cmd run dev".
+5. Abre http://localhost:5173 en tu navegador.
+
+Este ZIP no incluye node_modules. Las dependencias se instalan localmente.
+Lee PRECIOS-v0.9.4.md para detalles y fuentes.
