@@ -508,7 +508,7 @@ export default function App() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = 'skinvault-copia.json';
+    link.download = 'skinvault-backup.json';
     link.click();
     window.setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
@@ -520,8 +520,8 @@ export default function App() {
         <div className="top-actions">
           <label className="language-control"><span>{t('language')}</span>
             <select aria-label={t('language')} value={language} onChange={e => setLanguage(e.target.value as Language)}>
-              <option value="es">Español</option>
               <option value="en">English</option>
+              <option value="es">Español</option>
               <option value="ca">Català</option>
             </select>
           </label>

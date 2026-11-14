@@ -269,6 +269,6 @@ export function initialLanguage(): Language {
     const saved = localStorage.getItem(LANGUAGE_STORAGE_KEY);
     if (saved === 'es' || saved === 'en' || saved === 'ca') return saved;
   } catch { /* e.g. private mode */ }
-  const browserLanguage = navigator.language.toLowerCase();
-  return browserLanguage.startsWith('ca') ? 'ca' : browserLanguage.startsWith('es') ? 'es' : 'en';
+  // New visitors start in English; an explicitly selected language is preserved.
+  return 'en';
 }
