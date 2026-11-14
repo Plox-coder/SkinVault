@@ -209,7 +209,7 @@ function CollectionArtwork({ item, category, language }: { item: Collectible; ca
           <div className="collection-image-fallback"><span>✦</span><small>{t('imageUnavailable')}</small></div>
         )}
       </div>
-      <img className="square-ornament" src="/collection-square-frame.svg" aria-hidden="true" alt="" loading="lazy" />
+      <img className="square-ornament" src={`${import.meta.env.BASE_URL}collection-square-frame.svg`} aria-hidden="true" alt="" loading="lazy" />
       {item.ownedKnown && item.owned && (
         category === 'wards'
           ? <span className="ward-orb" aria-hidden="true" />

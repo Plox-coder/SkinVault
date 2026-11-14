@@ -70,6 +70,17 @@ test('la interfaz de las tarjetas ya no tiene editores de precios', () => {
   const jsx = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8');
   assert.doesNotMatch(jsx, /mythic-cost-editor|price-input|updatePricePreference\(/);
   assert.match(jsx, /className="skin-cost-badge auto"/);
+  assert.match(jsx, /formatNumber\.format\(price\.amount\)\} RP/);
+  assert.doesNotMatch(jsx, /RP · \{t\(/);
+  assert.doesNotMatch(jsx, /EM · \$\{t\(/);
   assert.match(jsx, /sanctumMaximumRp\(price\.pity\)/);
   assert.match(jsx, /sanctumMaxRp/);
+});
+
+test('el panel superior omite el contador de skins sin precio y mantiene los demás', () => {
+  const jsx = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8');
+  assert.doesNotMatch(jsx, /t\('unclassified'\)|stats\.unclassified/);
+  assert.match(jsx, /t\('mythicEssence'\)/);
+  assert.match(jsx, /t\('sanctumMaxRp'\)/);
+  assert.match(jsx, /t\('noRpPrice'\)/);
 });
