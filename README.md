@@ -51,27 +51,6 @@ Your imported collection is processed in your browser and saved locally using `l
 
 Some artwork and game data are loaded from Riot Data Dragon and CommunityDragon, so an internet connection is needed for those resources.
 
-## Development
-
-SkinVault is built with **React, TypeScript, and Vite**.
-
-To run the project locally, install Node.js and npm, then run:
-
-```bash
-npm ci
-npm run dev
-```
-
-Open the local address shown in the terminal (usually `http://localhost:5173/`).
-
-To create a production build:
-
-```bash
-npm run build
-```
-
-The generated site will be available in the `dist/` directory.
-
 ## Disclaimer
 
 SkinVault is an unofficial fan project and is **not affiliated with or endorsed by Riot Games**. League of Legends and related assets belong to Riot Games. Game data and artwork remain subject to their respective owners' terms and availability.
