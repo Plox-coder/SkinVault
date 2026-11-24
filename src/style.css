@@ -168,3 +168,26 @@
 .price-input span{white-space:nowrap}
 @media(max-width:900px){.pricing-overview{grid-template-columns:repeat(2,minmax(0,1fr))}.pricing-overview>div:last-of-type{grid-column:auto}}
 @media(max-width:580px){.pricing-overview{grid-template-columns:1fr}}
+
+/* v0.9.5: share links and read-only collection snapshots */
+.share-notice{display:flex;gap:10px 18px;align-items:center;flex-wrap:wrap;margin:-12px 0 28px;padding:12px 17px;border:1px solid #5b725e;border-radius:6px;background:#142c2b;color:#bfe0ca;font-size:12px}
+.share-notice strong{color:#e1d09f;font-weight:700}
+.share-notice span{color:#a7c5bd}
+.share-pricing-note{font-size:11px;color:#91a8b3;margin:16px 0 29px;line-height:1.75}
+.owned-button.view-only{display:inline-flex;align-items:center;justify-content:center;cursor:default}
+.share-rarity-filter{display:flex;align-items:center;gap:9px;font-size:12px;color:#a5b9c3}
+.share-rarity-filter select{border:1px solid #445a65;background:#112530;color:#e3d6b5;border-radius:5px;padding:10px 14px;min-width:155px;font-size:12px}
+.share-backdrop{position:fixed;inset:0;background:#020a12ce;z-index:60;display:flex;align-items:center;justify-content:center;padding:16px}
+.share-dialog{width:min(560px,100%);padding:25px;border-radius:10px;border:1px solid #897044;background:linear-gradient(155deg,#172b37,#0b1823);box-shadow:0 24px 70px #000a}
+.share-dialog-title{display:flex;justify-content:space-between;align-items:start;gap:20px}
+.share-dialog-title h2{font:normal 26px Georgia,serif;margin:0 0 12px;color:#efdfb6}
+.share-dialog p{font-size:13px;color:#aec2c9;line-height:1.6;margin:0 0 17px}
+.share-dialog label{display:block;color:#d9c497;font-size:12px;margin-bottom:8px}
+.share-dialog input{width:100%;min-width:0;padding:12px;background:#081620;border:1px solid #52616d;border-radius:5px;color:#e7e8e5;font-size:12px}
+.share-dialog-actions{display:flex;gap:10px;flex-wrap:wrap;margin:15px 0}
+.share-dialog-actions .button{flex:1}
+.share-dialog .share-feedback{color:#b8dfc2;margin:10px 0}
+.share-dialog small{font-size:11px;color:#90a7b1;line-height:1.65;display:block}
+.share-dismiss{background:none;border:1px solid #53626c;color:#c4d1d1;font-size:23px;line-height:1;min-width:34px;height:34px;border-radius:5px}
+.share-dismiss:hover{background:#28404d}
+@media(max-width:580px){.top-actions{flex-wrap:wrap}.top-actions>.language-control{width:100%}.share-dialog{padding:18px}.share-dialog-title h2{font-size:23px}.share-notice{margin-top:-10px}.share-rarity-filter{width:100%;justify-content:space-between}.share-rarity-filter select{flex:1}}

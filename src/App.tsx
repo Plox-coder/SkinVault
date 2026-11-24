@@ -2,10 +2,11 @@ import { ChangeEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { createTranslator, initialLanguage, LANGUAGE_STORAGE_KEY, type Language, type TranslationKey } from './i18n';
 import { historicalSkinCount } from './skinPriceReference';
 import { skinPrice, sanctumMaximumRp, type Rarity, type PricePreference, type SpecialKind } from './skinPricing';
+import { encodeShareHash, parseShareHash } from './shareCollection';
 
 type OwnedFilter = 'all' | 'owned' | 'missing' | 'unknown';
 type RawSkin = Record<string, unknown>;
-type SkinMeta = { rarity: Rarity | null; loadScreenPath: string | null };
+type SkinMeta = { rarity: Rarity | null; loadScreenPath: string | null; name: string };
 const DRAGON_BASE = 'https://raw.communitydragon.org/latest/plugins/rcp-be-lol-game-data/global/default/';
 const SKINS_METADATA_URL = DRAGON_BASE + 'v1/skins.json';
 
@@ -44,6 +45,7 @@ function extractMetadata(data: unknown): Record<string, SkinMeta> {
     map[id] = {
       rarity: normalizeRarity(entry.rarity),
       loadScreenPath: dragonAssetUrl(entry.loadScreenPath),
+      name: safeText(entry.name).trim().slice(0, 180),
     };
   }
   return map;
@@ -314,6 +316,7 @@ function Art({ skin, champions, meta, rarity, language }: {
 
 export default function App() {
   const inputRef = useRef<HTMLInputElement>(null);
+  const shareLinkRef = useRef<HTMLInputElement>(null);
   const [language, setLanguage] = useState<Language>(initialLanguage);
   const t = useMemo(() => createTranslator(language), [language]);
   const formatNumber = useMemo(() => new Intl.NumberFormat(language === 'ca' ? 'ca-ES' : language === 'es' ? 'es-ES' : 'en-US'), [language]);
@@ -321,7 +324,24 @@ export default function App() {
     document.documentElement.lang = language;
     try { localStorage.setItem(LANGUAGE_STORAGE_KEY, language); } catch { /* preference not saved */ }
   }, [language]);
+  // Hash-based shares are independent of the collection stored in this browser.
+  const [shareState, setShareState] = useState(() => parseShareHash(window.location.hash));
+  const isSharing = shareState.kind === 'shared';
   const [collection, setCollection] = useState<SavedCollection | null>(() => loadSaved());
+  const [shareUrl, setShareUrl] = useState('');
+  const [shareRarity, setShareRarity] = useState<Rarity | 'all'>('all');
+  const [shareCopyStatus, setShareCopyStatus] = useState<'idle' | 'copied' | 'failed'>('idle');
+  useEffect(() => {
+    const onHashChange = () => {
+      setShareState(parseShareHash(window.location.hash));
+      setSearch('');
+      setFilter('all');
+      setShareRarity('all');
+    };
+    window.addEventListener('hashchange', onHashChange);
+    return () => window.removeEventListener('hashchange', onHashChange);
+  }, []);
+
   const [champions, setChampions] = useState<Record<string, Champion>>({});
   const [skinMetadata, setSkinMetadata] = useState<Record<string, SkinMeta>>({});
   const [raritiesError, setRaritiesError] = useState(false);
@@ -374,13 +394,32 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    // Opening somebody else's link must never save their snapshot to localStorage.
+    if (isSharing) return;
     try {
       if (collection) localStorage.setItem(STORAGE_KEY, JSON.stringify(collection));
       else localStorage.removeItem(STORAGE_KEY);
     } catch { setError(t('backupError')); }
-  }, [collection, t]);
+  }, [collection, t, isSharing]);
 
-  const skins = collection?.skins ?? [];
+  // Rebuild display data from public CommunityDragon metadata. The URL contains
+  // owned IDs only, never player identification, the original JSON or prices.
+  const sharedCollection: SavedCollection | null = useMemo(() => {
+    if (shareState.kind !== 'shared') return null;
+    return {
+      accountLabel: '', importedAt: '', icons: [], wards: [], chromas: [],
+      extrasIncluded: false, pricing: {},
+      skins: shareState.ids.map(id => ({
+        id, name: skinMetadata[id]?.name || `Skin #${id}`,
+        championId: String(Math.floor(Number(id) / 1000)),
+        owned: true, rp: null,
+      })),
+    };
+  }, [shareState, skinMetadata]);
+  const activeCollection = isSharing ? sharedCollection : collection;
+  const tab = isSharing ? 'skins' : activeTab;
+  const effectiveFilter = isSharing && (filter === 'missing' || filter === 'unknown') ? 'all' : filter;
+  const skins = activeCollection?.skins ?? [];
   const stats = useMemo(() => {
     const owned = skins.filter(skin => skin.owned);
     let rp = 0, essence = 0, sanctum = 0, sanctumMaxRp = 0, special = 0, priced = 0;
@@ -397,15 +436,16 @@ export default function App() {
   }, [skins, skinMetadata]);
 
   const visible = useMemo(() => skins.filter(skin => {
-    if (filter === 'owned' && !skin.owned) return false;
-    if (filter === 'missing' && skin.owned) return false;
+    if (isSharing && shareRarity !== 'all' && (skinMetadata[skin.id]?.rarity ?? 'normal') !== shareRarity) return false;
+    if (effectiveFilter === 'owned' && !skin.owned) return false;
+    if (effectiveFilter === 'missing' && skin.owned) return false;
     const champKey = skin.championId || String(Math.floor(Number(skin.id) / 1000));
     const championName = champions[champKey]?.name || '';
     const q = search.trim().toLocaleLowerCase(language);
     return !q || `${skin.name} ${championName} ${skin.id}`.toLocaleLowerCase(language).includes(q);
-  }).sort((a, b) => a.name.localeCompare(b.name, language)), [skins, filter, search, champions, language]);
+  }).sort((a, b) => a.name.localeCompare(b.name, language)), [skins, effectiveFilter, search, champions, language, isSharing, shareRarity, skinMetadata]);
 
-  const collectibleItems = activeTab === 'skins' ? [] : collection?.[activeTab] ?? [];
+  const collectibleItems = tab === 'skins' ? [] : activeCollection?.[tab] ?? [];
   const categoryStats = useMemo(() => {
     const total = collectibleItems.length;
     const owned = collectibleItems.filter(item => item.ownedKnown && item.owned).length;
@@ -420,13 +460,14 @@ export default function App() {
     return !q || `${item.name} ${item.id} ${item.skinName ?? ''}`.toLocaleLowerCase(language).includes(q);
   }).sort((a, b) => a.name.localeCompare(b.name, language)), [collectibleItems, search, filter, language]);
   useEffect(() => setVisibleLimit(90), [activeTab, search, filter]);
-  const selectedTotal = activeTab === 'skins' ? skins.length : categoryStats.total;
-  const selectedOwned = activeTab === 'skins' ? stats.owned : categoryStats.owned;
-  const selectedMissing = activeTab === 'skins' ? stats.missing : categoryStats.missing;
-  const selectedUnknown = activeTab === 'skins' ? 0 : categoryStats.unknown;
+  const selectedTotal = tab === 'skins' ? skins.length : categoryStats.total;
+  const selectedOwned = tab === 'skins' ? stats.owned : categoryStats.owned;
+  const selectedMissing = tab === 'skins' ? stats.missing : categoryStats.missing;
+  const selectedUnknown = tab === 'skins' ? 0 : categoryStats.unknown;
   const verifiedTotal = selectedTotal - selectedUnknown;
 
   async function importFile(event: ChangeEvent<HTMLInputElement>) {
+    if (isSharing) return;
     setError(''); setNotice('');
     const file = event.target.files?.[0];
     event.target.value = '';
@@ -479,6 +520,7 @@ export default function App() {
   }
 
   function updateSkin(id: string, change: Pick<Skin, 'owned'>) {
+    if (isSharing) return;
     setCollection(previous => previous ? {
       ...previous,
       skins: previous.skins.map(skin => skin.id === id ? { ...skin, ...change } : skin),
@@ -486,6 +528,7 @@ export default function App() {
   }
 
   function updateCollectible(category: Category, id: string, owned: boolean) {
+    if (isSharing) return;
     setCollection(previous => previous ? {
       ...previous,
       [category]: previous[category].map(item => item.id === id ? { ...item, owned, ownedKnown: true } : item),
@@ -493,7 +536,7 @@ export default function App() {
   }
 
   function exportCollection() {
-    if (!collection) return;
+    if (isSharing || !collection) return;
     const data = {
       application: 'SkinVault', format: 2, exportedAt: new Date().toISOString(),
       accountLabel: collection.accountLabel,
@@ -513,6 +556,55 @@ export default function App() {
     window.setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
 
+  function createShareLink() {
+    if (!collection || isSharing) return;
+    const ids = collection.skins.filter(skin => skin.owned).map(skin => skin.id);
+    if (ids.length === 0) { setError(t('shareNoOwned')); return; }
+    try {
+      const hash = encodeShareHash(ids);
+      const origin = ['localhost', '127.0.0.1'].includes(window.location.hostname)
+        ? 'https://plox-coder.github.io/SkinVault/'
+        : `${window.location.origin}${window.location.pathname}`;
+      setShareUrl(`${origin}${hash}`);
+      setShareCopyStatus('idle');
+      setError('');
+    } catch {
+      setError(t('shareFailure'));
+    }
+  }
+
+  async function copyShareLink() {
+    if (!shareUrl) return;
+    try {
+      if (!navigator.clipboard?.writeText) throw new Error('Clipboard unavailable');
+      await navigator.clipboard.writeText(shareUrl);
+      setShareCopyStatus('copied');
+    } catch {
+      shareLinkRef.current?.focus();
+      shareLinkRef.current?.select();
+      setShareCopyStatus('failed');
+    }
+  }
+
+  function closeSharedView() {
+    // No local collection is imported, overwritten or cleared by this action.
+    window.history.replaceState(null, '', window.location.pathname + window.location.search);
+    setShareState({ kind: 'none' });
+    setActiveTab('skins');
+    setShareRarity('all');
+    setFilter('all');
+    setSearch('');
+  }
+
+  useEffect(() => {
+    if (!shareUrl) return;
+    const onEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setShareUrl('');
+    };
+    window.addEventListener('keydown', onEscape);
+    return () => window.removeEventListener('keydown', onEscape);
+  }, [shareUrl]);
+
   return (
     <div className="app-shell">
       <header className="topbar">
@@ -525,19 +617,26 @@ export default function App() {
               <option value="ca">Català</option>
             </select>
           </label>
-          {collection && <button className="button button-outline" onClick={exportCollection}>{t('copy')}</button>}
-          <button className="button button-primary" onClick={() => inputRef.current?.click()}>{t('import')}</button>
+          {isSharing ? (
+            <button className="button button-primary" onClick={closeSharedView}>{t('backToMine')}</button>
+          ) : (<>
+            {collection && <button className="button button-outline" onClick={createShareLink}>{t('shareCollection')}</button>}
+            {collection && <button className="button button-outline" onClick={exportCollection}>{t('copy')}</button>}
+            <button className="button button-primary" onClick={() => inputRef.current?.click()}>{t('import')}</button>
+          </>)}
         </div>
       </header>
 
       <main className="content">
         <div className="eyebrow">{t('inventory')} <span className="eyebrow-line" /></div>
         <div className="heading-row">
-          <div><h1>{t(activeTab === 'skins' ? 'heading' : 'extraHeading', { category: t(activeTab === 'icons' ? 'tabIcons' : activeTab === 'wards' ? 'tabWards' : 'tabChromas') })}</h1><p>{t(activeTab === 'skins' ? 'intro' : 'extraIntro')}</p></div>
-          {collection && <div className="account"><span>{t('importedAccount')}</span><strong>{language !== 'es' && collection.accountLabel === 'Mi colección' ? t('myCollection') : collection.accountLabel}</strong></div>}
+          <div><h1>{isSharing ? t('sharedHeading') : t(tab === 'skins' ? 'heading' : 'extraHeading', { category: t(tab === 'icons' ? 'tabIcons' : tab === 'wards' ? 'tabWards' : 'tabChromas') })}</h1><p>{isSharing ? t('sharedIntro') : t(tab === 'skins' ? 'intro' : 'extraIntro')}</p></div>
+          {!isSharing && collection && <div className="account"><span>{t('importedAccount')}</span><strong>{language !== 'es' && collection.accountLabel === 'Mi colección' ? t('myCollection') : collection.accountLabel}</strong></div>}
         </div>
+        {isSharing && <div className="share-notice" role="status"><strong>{t('shareReadOnly')}</strong><span>{t('shareLocalSafe')}</span></div>}
+        {shareState.kind === 'invalid' && <div className="message error" role="alert">{t('shareInvalid')}</div>}
 
-        {collection && (
+        {activeCollection && !isSharing && (
           <nav className="collection-tabs" aria-label={t('collectionTabs')}>
             {(['skins', 'icons', 'wards', 'chromas'] as const).map(category => (
               <button key={category} type="button"
@@ -546,23 +645,30 @@ export default function App() {
                 onClick={() => { setActiveTab(category); setSearch(''); setFilter('all'); }}>
                 <span className="collection-tab-symbol" aria-hidden="true">{category === 'skins' ? '◈' : category === 'icons' ? '◉' : category === 'wards' ? '♜' : '✧'}</span>
                 {t(category === 'skins' ? 'tabSkins' : category === 'icons' ? 'tabIcons' : category === 'wards' ? 'tabWards' : 'tabChromas')}
-                <small>{formatNumber.format(category === 'skins' ? skins.length : collection[category].length)}</small>
+                <small>{formatNumber.format(category === 'skins' ? skins.length : activeCollection[category].length)}</small>
               </button>
             ))}
           </nav>
         )}
-        <section className="stats-grid" aria-label={t('statistics')}>
-          <div className="stat"><span>{t(activeTab === 'skins' ? 'registered' : 'registeredObjects')}</span><strong>{formatNumber.format(selectedTotal)}</strong><small>{activeTab === 'skins' ? t('noClassic') : t('catalogImported')}</small></div>
-          <div className="stat"><span>{t('obtained')}</span><strong>{formatNumber.format(selectedOwned)}</strong><small>{verifiedTotal ? t('progressCatalog', { percent: Math.round(selectedOwned / verifiedTotal * 100) }) : t('noData')}</small></div>
-          <div className="stat"><span>{t('missing')}</span><strong>{formatNumber.format(selectedMissing)}</strong><small>{activeTab === 'skins' ? t('fromCatalog') : t('onlyVerified')}</small></div>
-          {activeTab === 'skins' ? (
+        {activeCollection && <section className="stats-grid" aria-label={t('statistics')}>
+          {isSharing ? (<>
+            <div className="stat"><span>{t('shareOwned')}</span><strong>{formatNumber.format(stats.owned)}</strong><small>{t('shareSnapshot')}</small></div>
             <div className="stat stat-gold"><span>{t('rpReference')}</span><strong>{formatNumber.format(stats.rp)} <em>RP</em></strong><small>{t('rpOnly', { count: stats.priced })}</small></div>
-          ) : (
-            <div className="stat stat-gold"><span>{t('unverified')}</span><strong>{formatNumber.format(selectedUnknown)}</strong><small>{t('pendingVerification')}</small></div>
-          )}
-        </section>
+            <div className="stat"><span>{t('mythicEssence')}</span><strong>{formatNumber.format(stats.essence)} <em>EM</em></strong><small>{t('mythicCount', { count: stats.essenceCount })}</small></div>
+            <div className="stat"><span>{t('sanctumMaxRp')}</span><strong>{formatNumber.format(stats.sanctumMaxRp)} <em>RP</em></strong><small>{t('sanctumBreakdown', { variants: stats.variantsCount, exalted: stats.exaltedCount })}</small></div>
+          </>) : (<>
+            <div className="stat"><span>{t(tab === 'skins' ? 'registered' : 'registeredObjects')}</span><strong>{formatNumber.format(selectedTotal)}</strong><small>{tab === 'skins' ? t('noClassic') : t('catalogImported')}</small></div>
+            <div className="stat"><span>{t('obtained')}</span><strong>{formatNumber.format(selectedOwned)}</strong><small>{verifiedTotal ? t('progressCatalog', { percent: Math.round(selectedOwned / verifiedTotal * 100) }) : t('noData')}</small></div>
+            <div className="stat"><span>{t('missing')}</span><strong>{formatNumber.format(selectedMissing)}</strong><small>{tab === 'skins' ? t('fromCatalog') : t('onlyVerified')}</small></div>
+            {tab === 'skins' ? (
+              <div className="stat stat-gold"><span>{t('rpReference')}</span><strong>{formatNumber.format(stats.rp)} <em>RP</em></strong><small>{t('rpOnly', { count: stats.priced })}</small></div>
+            ) : (
+              <div className="stat stat-gold"><span>{t('unverified')}</span><strong>{formatNumber.format(selectedUnknown)}</strong><small>{t('pendingVerification')}</small></div>
+            )}
+          </>)}
+        </section>}
 
-        {activeTab === 'skins' && collection && (
+        {tab === 'skins' && activeCollection && !isSharing && (
           <section className="pricing-overview" aria-label={t('pricingOverview')}>
             <div><span>{t('mythicEssence')}</span><strong>{formatNumber.format(stats.essence)} <small>EM</small></strong><small>{t('mythicCount', { count: stats.essenceCount })}</small></div>
             <div><span>{t('sanctumMaxRp')}</span><strong>{formatNumber.format(stats.sanctumMaxRp)} <small>RP</small></strong><small>{t('sanctumBreakdown', { variants: stats.variantsCount, exalted: stats.exaltedCount })}</small></div>
@@ -570,12 +676,13 @@ export default function App() {
             <p>{t('sanctumExplanation')} {t('catalogCoverage', { count: formatNumber.format(historicalSkinCount) })}</p>
           </section>
         )}
+        {isSharing && <p className="share-pricing-note">{t('pricingDisclaimer')}</p>}
         {error && <div className="message error" role="alert">{error}</div>}
         {notice && <div className="message success" role="status">{notice}</div>}
         {imagesError && <div className="message hint">{t('dragonError')}</div>}
         {raritiesError && <div className="message hint">{t('rarityError')}</div>}
 
-        {!collection ? (
+        {!activeCollection ? (
           <section className="welcome">
             <div className="welcome-icon">✧</div>
             <h2>{t('welcomeHeading')}</h2>
@@ -585,34 +692,45 @@ export default function App() {
           </section>
         ) : (
           <>
-            <div className="collection-progress"><div className="progress-copy"><span>{t('progress')}</span><strong>{verifiedTotal ? Math.round(selectedOwned / verifiedTotal * 100) : 0} %</strong></div><div className="progress-track"><div style={{ width: `${verifiedTotal ? selectedOwned / verifiedTotal * 100 : 0}%` }} /></div></div>
+            {!isSharing && <div className="collection-progress"><div className="progress-copy"><span>{t('progress')}</span><strong>{verifiedTotal ? Math.round(selectedOwned / verifiedTotal * 100) : 0} %</strong></div><div className="progress-track"><div style={{ width: `${verifiedTotal ? selectedOwned / verifiedTotal * 100 : 0}%` }} /></div></div>}
             <section className="library-head">
               <div><div className="eyebrow">{t('library')}</div><h2>
-                {t(activeTab === 'skins' ? 'allSkins' : activeTab === 'icons' ? 'tabIcons' : activeTab === 'wards' ? 'tabWards' : 'tabChromas')}
-                <span> ({formatNumber.format(activeTab === 'skins' ? visible.length : visibleCollectibles.length)})</span>
+                {isSharing ? t('shareOwned') : t(tab === 'skins' ? 'allSkins' : tab === 'icons' ? 'tabIcons' : tab === 'wards' ? 'tabWards' : 'tabChromas')}
+                <span> ({formatNumber.format(tab === 'skins' ? visible.length : visibleCollectibles.length)})</span>
               </h2></div>
               <div className="toolbar">
                 <input aria-label={t('searchLabel')} type="search"
-                  placeholder={t(activeTab === 'skins' ? 'search' : 'searchObjects')}
+                  placeholder={t(tab === 'skins' ? 'search' : 'searchObjects')}
                   value={search} onChange={e => setSearch(e.target.value)} />
-                <div className="filters" role="group" aria-label={t('statusFilter')}>
-                  <button className={filter === 'all' ? 'active' : ''} onClick={() => setFilter('all')}>{t('all')}</button>
-                  <button className={filter === 'owned' ? 'active' : ''} onClick={() => setFilter('owned')}>{t('ownedFilter')}</button>
-                  <button className={filter === 'missing' ? 'active' : ''} onClick={() => setFilter('missing')}>{t('missingFilter')}</button>
-                  {activeTab !== 'skins' && <button className={filter === 'unknown' ? 'active' : ''} onClick={() => setFilter('unknown')}>{t('unverified')}</button>}
-                </div>
+                {isSharing ? (
+                  <label className="share-rarity-filter">{t('rarity')}
+                    <select value={shareRarity} onChange={event => setShareRarity(event.target.value as Rarity | 'all')}>
+                      <option value="all">{t('all')}</option>
+                      {(['normal', 'epic', 'legendary', 'mythic', 'ultimate', 'exalted', 'transcendent'] as const).map(rarity => (
+                        <option value={rarity} key={rarity}>{t(rarity)}</option>
+                      ))}
+                    </select>
+                  </label>
+                ) : (
+                  <div className="filters" role="group" aria-label={t('statusFilter')}>
+                    <button className={filter === 'all' ? 'active' : ''} onClick={() => setFilter('all')}>{t('all')}</button>
+                    <button className={filter === 'owned' ? 'active' : ''} onClick={() => setFilter('owned')}>{t('ownedFilter')}</button>
+                    <button className={filter === 'missing' ? 'active' : ''} onClick={() => setFilter('missing')}>{t('missingFilter')}</button>
+                    {tab !== 'skins' && <button className={filter === 'unknown' ? 'active' : ''} onClick={() => setFilter('unknown')}>{t('unverified')}</button>}
+                  </div>
+                )}
               </div>
             </section>
-            {activeTab !== 'skins' && !collection.extrasIncluded && (
+            {tab !== 'skins' && !activeCollection.extrasIncluded && (
               <div className="message hint">{t('reimportExtras')}</div>
             )}
-            {activeTab === 'chromas' && collection.chromaScan && collection.chromaScan.totalSkins > 0 && (
+            {tab === 'chromas' && activeCollection.chromaScan && activeCollection.chromaScan.totalSkins > 0 && (
               <div className="message hint">{t('chromaProgress', {
-                checked: collection.chromaScan.checkedSkins,
-                total: collection.chromaScan.totalSkins,
+                checked: activeCollection.chromaScan.checkedSkins,
+                total: activeCollection.chromaScan.totalSkins,
               })}</div>
             )}
-            {activeTab === 'skins' ? <>
+            {tab === 'skins' ? <>
 
             {visible.length ? (
               <div className="skin-grid">
@@ -623,7 +741,11 @@ export default function App() {
                   return <article className={`skin-card ${skin.owned ? 'skin-owned' : 'skin-unowned'}`} key={skin.id}>
                     <Art skin={skin} champions={champions} meta={skinMetadata[skin.id]} rarity={rarity} language={language} />
                     <div className="skin-info"><div className="skin-category-line"><span className="champ-name">{champions[champKey]?.name || t('champFallback', { id: champKey })}</span>{rarity && <span className="rarity-readonly" title={t('rarity')}>{t(rarity)}</span>}</div><h3 title={skin.name}>{skin.name}</h3>
-                      <div className="skin-controls"><button type="button" className={`owned-button ${skin.owned ? 'yes' : 'no'}`} onClick={() => updateSkin(skin.id, { owned: !skin.owned })}>{skin.owned ? t('own') : t('dontOwn')}</button>{price.currency === 'rp' ? (
+                      <div className="skin-controls">{isSharing ? (
+                        <span className="owned-button yes view-only">{skin.owned ? t('own') : t('dontOwn')}</span>
+                      ) : (
+                        <button type="button" className={`owned-button ${skin.owned ? 'yes' : 'no'}`} onClick={() => updateSkin(skin.id, { owned: !skin.owned })}>{skin.owned ? t('own') : t('dontOwn')}</button>
+                      )}{price.currency === 'rp' ? (
                         <span className="skin-cost-badge auto" title={price.automatic ? t('automaticPrice') : t('importedPrice')}>
                           {formatNumber.format(price.amount)} RP
                         </span>
@@ -673,12 +795,29 @@ export default function App() {
                   </button>
                 )}
                 </>
-              ) : <div className="nothing">{!collection.extrasIncluded ? t('reimportExtras') : t('noObjects')}</div>
+              ) : <div className="nothing">{!activeCollection.extrasIncluded ? t('reimportExtras') : t('noObjects')}</div>
             )}
-            <p className="disclaimer">{t(activeTab === 'skins' ? 'pricingDisclaimer' : 'extraDisclaimer')}</p>
+            <p className="disclaimer">{t(tab === 'skins' ? 'pricingDisclaimer' : 'extraDisclaimer')}</p>
           </>
         )}
       </main>
+      {shareUrl && <div className="share-backdrop" onMouseDown={event => {
+        if (event.target === event.currentTarget) setShareUrl('');
+      }}>
+        <section role="dialog" aria-modal="true" aria-labelledby="share-title" className="share-dialog">
+          <div className="share-dialog-title"><h2 id="share-title">{t('shareTitle')}</h2><button type="button" className="share-dismiss" onClick={() => setShareUrl('')} aria-label={t('closeShare')}>×</button></div>
+          <p>{t('shareDetails')}</p>
+          <label htmlFor="share-url">{t('shareLink')}</label>
+          <input id="share-url" ref={shareLinkRef} value={shareUrl} onFocus={event => event.target.select()} readOnly />
+          <div className="share-dialog-actions">
+            <button type="button" className="button button-primary" onClick={copyShareLink}>{t('copyShareLink')}</button>
+            <button type="button" className="button button-outline" onClick={() => setShareUrl('')}>{t('closeShare')}</button>
+          </div>
+          {shareCopyStatus === 'copied' && <p className="share-feedback" role="status">{t('shareCopied')}</p>}
+          {shareCopyStatus === 'failed' && <p className="share-feedback" role="status">{t('shareCopyManually')}</p>}
+          <small>{t('sharePrivacy')}</small>
+        </section>
+      </div>}
       <footer className="bottom">{t('footer')}</footer>
       <input ref={inputRef} type="file" accept=".json,application/json" className="sr-only" onChange={importFile} />
     </div>
